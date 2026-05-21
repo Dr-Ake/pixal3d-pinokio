@@ -73,16 +73,14 @@ module.exports = {
         }
       }]
 
-      if (!wslBlackwell) {
-        items.push({
-          icon: "fa-solid fa-bolt",
-          text: kernel.platform === "win32" ? "Start WSL Standard" : "Start Standard",
-          href: "start.js",
-          params: {
-            low_vram: false
-          }
-        })
-      }
+      items.push({
+        icon: "fa-solid fa-bolt",
+        text: kernel.platform === "win32" ? "Start WSL Standard" : "Start Standard",
+        href: "start.js",
+        params: {
+          low_vram: false
+        }
+      })
 
       return items.concat([{
         icon: "fa-solid fa-globe",

@@ -25,7 +25,10 @@ except ImportError:
 init_lock = threading.Lock()
 
 os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+if os.environ.get("LOW_VRAM", "0") == "1":
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,garbage_collection_threshold:0.8,max_split_size_mb:512")
+else:
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8")
 os.environ.setdefault("ATTN_BACKEND", "flash_attn")
 os.environ["FLEX_GEMM_AUTOTUNE_CACHE_PATH"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'autotune_cache.json')
 os.environ["FLEX_GEMM_AUTOTUNER_VERBOSE"] = '1'
@@ -510,10 +513,24 @@ def generate_3d(
 
 @app.api()
 @spaces.GPU(duration=240)
-def extract_glb_api(state_path: str, decimation_target: int, texture_size: int, session_id: str = "") -> FileData:
+def extract_glb_api(
+    state_path: str,
+    decimation_target: int,
+    texture_size: int,
+    remesh: bool = False,
+    session_id: str = "",
+) -> FileData:
     init_models()
     _reset_progress(session_id)
     _update_progress("Decoding latent", 0, 1)
+    decimation_target = max(50000, min(int(decimation_target), 1000000))
+    texture_size = int(texture_size)
+    if texture_size not in (1024, 2048, 4096):
+        texture_size = 2048
+    print(
+        f"[Extract] decimation_target={decimation_target}, texture_size={texture_size}, remesh={remesh}",
+        flush=True,
+    )
     
     shape_slat, tex_slat, res = unpack_state(state_path)
     mesh = pipeline.decode_latent(shape_slat, tex_slat, res)[0]
@@ -524,7 +541,7 @@ def extract_glb_api(state_path: str, decimation_target: int, texture_size: int, 
         coords=mesh.coords, attr_layout=pipeline.pbr_attr_layout,
         grid_size=res, aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
         decimation_target=decimation_target, texture_size=texture_size,
-        remesh=True, remesh_band=1, remesh_project=0, use_tqdm=True,
+        remesh=remesh, remesh_band=1, remesh_project=0, use_tqdm=True,
     )
     rot = np.array([
         [-1,  0,  0,  0],

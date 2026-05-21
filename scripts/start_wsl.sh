@@ -56,11 +56,6 @@ if torch.cuda.is_available():
 PY
 fi
 
-if [ "$BLACKWELL" = "1" ] && [ "$MODE" != "low" ]; then
-  echo "[Pixal3D] Blackwell/RTX 50 detected. Standard mode is unstable in WSL with the current CUDA stack, so Low VRAM mode will be used."
-  MODE="low"
-fi
-
 mkdir -p "$WSL_ROOT/cache/HF_HOME" "$WSL_ROOT/cache/TORCH_HOME" "$WSL_ROOT/cache/GRADIO_TEMP_DIR"
 
 if [ "$BLACKWELL" = "1" ]; then
@@ -72,7 +67,11 @@ else
 fi
 export SPARSE_ATTN_BACKEND="${SPARSE_ATTN_BACKEND:-$ATTN_BACKEND}"
 export SPARSE_CONV_BACKEND="${SPARSE_CONV_BACKEND:-flex_gemm}"
-export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+if [ "$MODE" = "low" ]; then
+  export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,garbage_collection_threshold:0.8,max_split_size_mb:512}"
+else
+  export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-garbage_collection_threshold:0.8}"
+fi
 export OPENCV_IO_ENABLE_OPENEXR=1
 export GRADIO_ANALYTICS_ENABLED=False
 export HF_HOME="$WSL_ROOT/cache/HF_HOME"

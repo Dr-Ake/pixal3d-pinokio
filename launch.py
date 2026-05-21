@@ -147,6 +147,7 @@ def force_natten_flex_on_blackwell():
     def wrap_attention_function(name, fn, flex_backend, backends_to_replace):
         @functools.wraps(fn)
         def wrapped(query, *args, **kwargs):
+            print(f"[NATTEN WRAPPER] {name} called. query shape: {query.shape}, backend: {kwargs.get('backend')}, Blackwell: {is_blackwell_tensor(query)}", flush=True)
             if (
                 name == "na2d"
                 and is_blackwell_tensor(query)
@@ -155,23 +156,34 @@ def force_natten_flex_on_blackwell():
                 key = get_call_arg(args, kwargs, "key", 0)
                 value = get_call_arg(args, kwargs, "value", 1)
                 kernel_size = get_call_arg(args, kwargs, "kernel_size", 2)
+                print(f"[NATTEN WRAPPER] key shape: {getattr(key, 'shape', None)}, value shape: {getattr(value, 'shape', None)}, kernel_size: {kernel_size}", flush=True)
                 if (
                     key is not None
                     and value is not None
                     and kernel_size is not None
                     and getattr(value, "shape", [None])[-1] != query.shape[-1]
                 ):
-                    return torch_na2d_mixed_head_dim(
-                        query,
-                        key,
-                        value,
-                        kernel_size,
-                        stride=get_call_arg(args, kwargs, "stride", 3, 1),
-                        dilation=get_call_arg(args, kwargs, "dilation", 4, 1),
-                        is_causal=get_call_arg(args, kwargs, "is_causal", 5, False),
-                        scale=get_call_arg(args, kwargs, "scale", 6, None),
-                    )
+                    print(f"[NATTEN WRAPPER] Entering mixed head dim fallback!", flush=True)
+                    try:
+                        res = torch_na2d_mixed_head_dim(
+                            query,
+                            key,
+                            value,
+                            kernel_size,
+                            stride=get_call_arg(args, kwargs, "stride", 3, 1),
+                            dilation=get_call_arg(args, kwargs, "dilation", 4, 1),
+                            is_causal=get_call_arg(args, kwargs, "is_causal", 5, False),
+                            scale=get_call_arg(args, kwargs, "scale", 6, None),
+                        )
+                        print(f"[NATTEN WRAPPER] Fallback executed successfully, output shape: {res.shape}", flush=True)
+                        return res
+                    except Exception as e:
+                        print(f"[NATTEN WRAPPER] Fallback failed: {e}", flush=True)
+                        import traceback
+                        traceback.print_exc()
+                        raise e
             if is_blackwell_tensor(query) and kwargs.get("backend") in backends_to_replace:
+                print(f"[NATTEN WRAPPER] Forcing flex_backend '{flex_backend}'", flush=True)
                 kwargs["backend"] = flex_backend
             return fn(query, *args, **kwargs)
 
@@ -235,6 +247,12 @@ def cleanup_cuda_state(app_module, endpoint_name: str):
                 image = getattr(value, "image", None)
                 if image is not None and getattr(image, "is_cuda", False):
                     value.image = image.cpu()
+        else:
+            # Standard Mode: just clean up envmap structures
+            for env_light in getattr(app_module, "envmap", {}) or {}:
+                value = app_module.envmap[env_light]
+                if hasattr(value, "_nvdiffrec_envlight"):
+                    del value._nvdiffrec_envlight
 
         gc.collect()
         if torch.cuda.is_available():
@@ -339,10 +357,10 @@ def serialize_gpu_apis(app_module):
                 try:
                     prepare_low_vram_endpoint(app_module)
                     return __fn(*args, **kwargs)
-                except RuntimeError as exc:
-                    if is_fatal_cuda_error(exc):
-                        import traceback
-                        traceback.print_exc()
+                except Exception as exc:
+                    import traceback
+                    traceback.print_exc()
+                    if isinstance(exc, RuntimeError) and is_fatal_cuda_error(exc):
                         print(
                             f"[CUDA] Fatal CUDA context error in {__endpoint_name}; exiting so Pinokio can restart cleanly: {exc}",
                             flush=True,
@@ -371,7 +389,10 @@ def main():
     os.environ.setdefault("ATTN_BACKEND", "flash_attn_3")
     os.environ.setdefault("SPARSE_ATTN_BACKEND", os.environ["ATTN_BACKEND"])
     os.environ.setdefault("SPARSE_CONV_BACKEND", "flex_gemm")
-    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    if args.low_vram:
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,garbage_collection_threshold:0.8,max_split_size_mb:512"
+    else:
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
     os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
     os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
     os.environ["GRADIO_SERVER_NAME"] = args.host

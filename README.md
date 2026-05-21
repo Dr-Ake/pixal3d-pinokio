@@ -24,11 +24,13 @@ On RTX 50-series / Blackwell GPUs in WSL, this launcher uses Low VRAM mode even 
 
 1. Click Install in WSL on Windows, or Install on Linux.
 2. If prompted, enter `HF_TOKEN` after accepting access to `briaai/RMBG-2.0`.
-3. Click Start WSL Low VRAM. Standard mode is only shown on non-Blackwell setups.
+3. Click Start WSL Standard when you have enough VRAM, or Start WSL Low VRAM when you need the safer memory path.
 4. Open the Web UI when Pinokio shows it.
 5. Upload an image, generate previews, then extract the GLB.
 
 The first generation may take a while because Hugging Face model weights are downloaded and cached.
+
+GLB extraction speed depends heavily on export settings. The local UI defaults to a balanced export (`300k` decimation, `2048` texture, remesh off). Raise decimation, texture size, or Quality Remesh only when you need a heavier final asset.
 
 ## API
 
@@ -69,8 +71,9 @@ const generated = await client.predict("/generate_3d", {
 
 const glb = await client.predict("/extract_glb_api", {
   state_path: generated.data[0].state_path,
-  decimation_target: 1000000,
-  texture_size: 4096,
+  decimation_target: 300000,
+  texture_size: 2048,
+  remesh: false,
   session_id: crypto.randomUUID()
 });
 ```
@@ -106,8 +109,9 @@ generated = client.predict(
 )
 glb = client.predict(
     state_path=generated["state_path"],
-    decimation_target=1000000,
-    texture_size=4096,
+    decimation_target=300000,
+    texture_size=2048,
+    remesh=False,
     session_id=str(uuid4()),
     api_name="/extract_glb_api",
 )

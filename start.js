@@ -62,7 +62,7 @@ module.exports = async (kernel) => {
             GRADIO_ANALYTICS_ENABLED: "False",
             GRADIO_SERVER_NAME: "127.0.0.1",
             GRADIO_SERVER_PORT: `${port}`,
-            PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True",
+            PYTORCH_CUDA_ALLOC_CONF: lowVramEnabled === "1" ? "expandable_segments:True,garbage_collection_threshold:0.8,max_split_size_mb:512" : "garbage_collection_threshold:0.8",
             OPENCV_IO_ENABLE_OPENEXR: "1"
           },
           message: [
