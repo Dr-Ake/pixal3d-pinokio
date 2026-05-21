@@ -32,6 +32,14 @@ The first generation may take a while because Hugging Face model weights are dow
 
 GLB extraction speed depends heavily on export settings. The local UI defaults to a balanced export (`300k` decimation, `2048` texture, remesh off). Raise decimation, texture size, or Quality Remesh only when you need a heavier final asset.
 
+## Patch-Safe Updates
+
+The installed app remains a checkout of `TencentARC/Pixal3D`. Launcher compatibility fixes are stored as patch files in `patches/upstream` and applied during install/update.
+
+Update removes the current launcher patch overlay, pulls upstream with `--ff-only`, dry-runs the patches, and applies them only when the checks pass. If upstream changes the same code areas, update stops with a clear patch conflict message instead of overwriting behavior.
+
+Each patch run writes a diagnostic snapshot under `cache/patch-backups`, including the upstream commit, status, and worktree diff. The `cache` folder is intentionally ignored by git.
+
 ## API
 
 Pixal3D exposes a Gradio API from the launched base URL.

@@ -23,8 +23,5 @@ read_wsl_root() {
 WSL_ROOT="$(read_wsl_root)"
 APP_DIR="$WSL_ROOT/app"
 
-if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" pull
-fi
-
+bash "$LAUNCHER_ROOT/scripts/update_app.sh" "$APP_DIR"
 bash "$LAUNCHER_ROOT/scripts/install_wsl.sh"

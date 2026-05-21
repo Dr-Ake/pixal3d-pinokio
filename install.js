@@ -28,6 +28,12 @@ module.exports = {
     {
       method: "shell.run",
       params: {
+        message: "bash scripts/apply_patches.sh app"
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
         venv: "env",
         path: "app",
         message: [

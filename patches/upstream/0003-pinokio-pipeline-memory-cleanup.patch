@@ -1,0 +1,62 @@
+diff --git a/pixal3d/pipelines/pixal3d_image_to_3d.py b/pixal3d/pipelines/pixal3d_image_to_3d.py
+index 7129482..e776c1e 100644
+--- a/pixal3d/pipelines/pixal3d_image_to_3d.py
++++ b/pixal3d/pipelines/pixal3d_image_to_3d.py
+@@ -603,6 +603,7 @@ class Pixal3DImageTo3DPipeline(Pipeline):
+                     layout=self.pbr_attr_layout
+                 )
+             )
++
+         return out_mesh
+     
+     @torch.no_grad()
+@@ -683,6 +684,8 @@ class Pixal3DImageTo3DPipeline(Pipeline):
+             num_samples, sparse_structure_sampler_params
+         )
+         del cond_ss
++        import gc
++        gc.collect()
+         torch.cuda.empty_cache()
+ 
+         # ---- Stage 2: Shape LR 512 (proj) ----
+@@ -697,6 +700,8 @@ class Pixal3DImageTo3DPipeline(Pipeline):
+             coords, shape_slat_sampler_params
+         )
+         del cond_shape_lr
++        import gc
++        gc.collect()
+         torch.cuda.empty_cache()
+ 
+         # ---- Stage 3a: Upsample LR → HR ----
+@@ -724,6 +729,8 @@ class Pixal3DImageTo3DPipeline(Pipeline):
+ 
+         actual_grid_res = actual_hr_resolution // 16
+         del lr_slat, hr_coords, quant_coords
++        import gc
++        gc.collect()
+         torch.cuda.empty_cache()
+ 
+         # ---- Stage 3b: Shape HR (proj) ----
+@@ -756,6 +763,8 @@ class Pixal3DImageTo3DPipeline(Pipeline):
+         mean = torch.tensor(self.shape_slat_normalization['mean'])[None].to(hr_slat.device)
+         shape_slat = hr_slat * std + mean
+         del cond_shape_hr, noise_hr, hr_slat, hr_coords_unique
++        import gc
++        gc.collect()
+         torch.cuda.empty_cache()
+ 
+         # ---- Stage 4: Texture (proj) ----
+@@ -772,6 +781,8 @@ class Pixal3DImageTo3DPipeline(Pipeline):
+             shape_slat, tex_slat_sampler_params
+         )
+         del cond_tex
++        import gc
++        gc.collect()
+         torch.cuda.empty_cache()
+ 
+         # ---- Stage 5: Decode ----
+@@ -781,3 +792,4 @@ class Pixal3DImageTo3DPipeline(Pipeline):
+             return out_mesh, (shape_slat, tex_slat, res)
+         else:
+             return out_mesh
++

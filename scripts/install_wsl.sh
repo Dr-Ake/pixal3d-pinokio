@@ -28,11 +28,8 @@ if [ ! -d "$APP_DIR/.git" ]; then
   git clone https://github.com/TencentARC/Pixal3D.git "$APP_DIR"
 fi
 
-echo "[Pixal3D] Applying local patches..."
-cp -f "$LAUNCHER_ROOT/patches/app.py" "$APP_DIR/app.py"
-if [ -f "$LAUNCHER_ROOT/patches/index.html" ]; then
-  cp -f "$LAUNCHER_ROOT/patches/index.html" "$APP_DIR/index.html"
-fi
+echo "[Pixal3D] Applying local patch overlay..."
+bash "$LAUNCHER_ROOT/scripts/apply_patches.sh" "$APP_DIR"
 
 PY="$ENV_DIR/bin/python"
 cd "$APP_DIR"

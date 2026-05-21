@@ -1,0 +1,63 @@
+diff --git a/index.html b/index.html
+index 99a9933..aa2a97a 100644
+--- a/index.html
++++ b/index.html
+@@ -719,8 +719,24 @@
+                         </div>
+                         <hr style="border: 0; border-top: 1px solid var(--border); margin: 0.5rem 0;">
+                         <div class="input-wrapper">
+-                            <label>Decimation <span><span id="decim_val">1M</span></span></label>
+-                            <input type="range" id="decimation" min="100000" max="1000000" step="10000" value="1000000" oninput="updateVal('decimation')">
++                            <label>Decimation <span><span id="decimation_val">300k</span></span></label>
++                            <input type="range" id="decimation" min="50000" max="1000000" step="10000" value="300000" oninput="updateVal('decimation')">
++                        </div>
++                        <div class="input-wrapper">
++                            <label>Texture Size</label>
++                            <select id="texture-size">
++                                <option value="1024">1024 (Fast)</option>
++                                <option value="2048" selected>2048 (Balanced)</option>
++                                <option value="4096">4096 (Max Detail)</option>
++                            </select>
++                        </div>
++                        <div class="input-wrapper">
++                            <label>
++                                Quality Remesh
++                                <span style="display: flex; align-items: center; gap: 0.35rem;">
++                                    <input type="checkbox" id="quality-remesh" style="accent-color: var(--primary); width: 14px; height: 14px; cursor: pointer;">
++                                </span>
++                            </label>
+                         </div>
+                     </div>
+                 </div>
+@@ -1265,7 +1281,8 @@
+                 const params = {
+                     state_path: generationResult.state_path,
+                     decimation_target: parseInt(document.getElementById('decimation').value),
+-                    texture_size: 4096,
++                    texture_size: parseInt(document.getElementById('texture-size').value),
++                    remesh: document.getElementById('quality-remesh').checked,
+                     session_id: sessionId
+                 };
+ 
+@@ -1395,8 +1412,12 @@
+         window.updateVal = (id) => {
+             const val = document.getElementById(id).value;
+             let label = val;
+-            if (id === 'decimation') label = (val/1000000).toFixed(1) + 'M';
+-            document.getElementById(id + '_val').textContent = label;
++            if (id === 'decimation') {
++                const decimation = parseInt(val, 10);
++                label = decimation >= 1000000 ? '1M' : Math.round(decimation / 1000) + 'k';
++            }
++            const labelEl = document.getElementById(id + '_val');
++            if (labelEl) labelEl.textContent = label;
+         };
+ 
+         window.randomizeSeed = () => {
+@@ -1490,4 +1511,4 @@
+         init();
+     </script>
+ </body>
+-</html>
+\ No newline at end of file
++</html>

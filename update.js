@@ -9,18 +9,10 @@ module.exports = {
       next: null
     },
     {
-      when: "{{exists('.git')}}",
-      method: "shell.run",
-      params: {
-        message: "git pull"
-      }
-    },
-    {
       when: "{{exists('app')}}",
       method: "shell.run",
       params: {
-        path: "app",
-        message: "git pull"
+        message: "bash scripts/update_app.sh app"
       }
     },
     {

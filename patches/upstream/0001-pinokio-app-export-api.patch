@@ -1,0 +1,84 @@
+diff --git a/app.py b/app.py
+index 48479df..c4946f3 100644
+--- a/app.py
++++ b/app.py
+@@ -25,7 +25,10 @@ except ImportError:
+ init_lock = threading.Lock()
+ 
+ os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
+-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
++if os.environ.get("LOW_VRAM", "0") == "1":
++    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,garbage_collection_threshold:0.8,max_split_size_mb:512")
++else:
++    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8")
+ os.environ.setdefault("ATTN_BACKEND", "flash_attn")
+ os.environ["FLEX_GEMM_AUTOTUNE_CACHE_PATH"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'autotune_cache.json')
+ os.environ["FLEX_GEMM_AUTOTUNER_VERBOSE"] = '1'
+@@ -482,6 +485,11 @@ def generate_3d(
+             if hasattr(v, '_nvdiffrec_envlight'):
+                 del v._nvdiffrec_envlight
+             v.image = v.image.cpu()
++        
++        # Explicitly delete large variables so Python GC knows to free them before empty_cache
++        del mesh, shape_slat, tex_slat, mesh_list
++        import gc
++        gc.collect()
+         torch.cuda.empty_cache()
+     _update_progress("Rendering views", 1, 1)
+     
+@@ -505,10 +513,24 @@ def generate_3d(
+ 
+ @app.api()
+ @spaces.GPU(duration=240)
+-def extract_glb_api(state_path: str, decimation_target: int, texture_size: int, session_id: str = "") -> FileData:
++def extract_glb_api(
++    state_path: str,
++    decimation_target: int,
++    texture_size: int,
++    remesh: bool = False,
++    session_id: str = "",
++) -> FileData:
+     init_models()
+     _reset_progress(session_id)
+     _update_progress("Decoding latent", 0, 1)
++    decimation_target = max(50000, min(int(decimation_target), 1000000))
++    texture_size = int(texture_size)
++    if texture_size not in (1024, 2048, 4096):
++        texture_size = 2048
++    print(
++        f"[Extract] decimation_target={decimation_target}, texture_size={texture_size}, remesh={remesh}",
++        flush=True,
++    )
+     
+     shape_slat, tex_slat, res = unpack_state(state_path)
+     mesh = pipeline.decode_latent(shape_slat, tex_slat, res)[0]
+@@ -519,7 +541,7 @@ def extract_glb_api(state_path: str, decimation_target: int, texture_size: int,
+         coords=mesh.coords, attr_layout=pipeline.pbr_attr_layout,
+         grid_size=res, aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+         decimation_target=decimation_target, texture_size=texture_size,
+-        remesh=True, remesh_band=1, remesh_project=0, use_tqdm=True,
++        remesh=remesh, remesh_band=1, remesh_project=0, use_tqdm=True,
+     )
+     rot = np.array([
+         [-1,  0,  0,  0],
+@@ -532,6 +554,13 @@ def extract_glb_api(state_path: str, decimation_target: int, texture_size: int,
+     out_glb = os.path.join(TMP_DIR, f"result_{int(time.time()*1000)}.glb")
+     glb.export(out_glb, extension_webp=True)
+     _finish_progress()
++    
++    # Explicitly clear VRAM from extract_glb_api before returning
++    del mesh, shape_slat, tex_slat, glb
++    import gc
++    gc.collect()
++    torch.cuda.empty_cache()
++    
+     return FileData(path=out_glb)
+ 
+ # Mount assets and tmp for direct access
+@@ -556,4 +585,4 @@ if __name__ == "__main__":
+     # Pre-initialize models before launching the server
+     init_models()
+     
+-    app.launch(show_error=True, share=True)
+\ No newline at end of file
++    app.launch(show_error=True, share=True)
