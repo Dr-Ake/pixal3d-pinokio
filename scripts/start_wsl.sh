@@ -99,4 +99,9 @@ fi
 
 cd "$APP_DIR"
 echo "Launching Pixal3D on port $PORT"
-exec "$PY" "$LAUNCHER_ROOT/launch.py" --host 127.0.0.1 --port "$PORT" $LOW_VRAM_ARG
+set +e
+"$PY" "$LAUNCHER_ROOT/launch.py" --host 127.0.0.1 --port "$PORT" $LOW_VRAM_ARG
+STATUS=$?
+set -e
+echo "[Pixal3D] launch.py exited with status $STATUS"
+exit "$STATUS"

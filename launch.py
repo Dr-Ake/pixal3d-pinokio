@@ -4,6 +4,7 @@ import functools
 import os
 import sys
 import threading
+import types
 
 
 gpu_job_lock = threading.Lock()
@@ -238,17 +239,83 @@ def cleanup_cuda_state(app_module, endpoint_name: str):
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
+            if os.environ.get("PIXAL3D_CUDA_IPC_COLLECT", "0") == "1":
+                torch.cuda.ipc_collect()
     except Exception as exc:
         print(f"[Cleanup] CUDA cleanup after {endpoint_name} skipped: {exc}", flush=True)
 
 
+def stabilize_low_vram_image_conditioners(app_module):
+    """Avoid repeated DINO/NAF CPU-GPU cycling that can destabilize Blackwell WSL runs."""
+    try:
+        import torch
+
+        pipeline = getattr(app_module, "pipeline", None)
+        if (
+            not getattr(app_module, "LOW_VRAM", False)
+            or pipeline is None
+            or not torch.cuda.is_available()
+            or torch.cuda.get_device_capability(0)[0] < 12
+        ):
+            return
+
+        stabilized = []
+        for attr in (
+            "image_cond_model_ss",
+            "image_cond_model_shape_512",
+            "image_cond_model_shape_1024",
+            "image_cond_model_tex_1024",
+        ):
+            model = getattr(pipeline, attr, None)
+            if model is None or getattr(model, "_pinokio_cuda_persistent", False):
+                continue
+
+            if hasattr(model, "to"):
+                model.to(torch.device("cuda"))
+
+            original_cpu = getattr(model, "cpu", None)
+            if callable(original_cpu):
+                model._pinokio_original_cpu = original_cpu
+
+                def stay_on_cuda(self):
+                    return self
+
+                model.cpu = types.MethodType(stay_on_cuda, model)
+
+            model._pinokio_cuda_persistent = True
+            stabilized.append(attr)
+
+        if stabilized:
+            print(
+                "[Blackwell] Keeping low-VRAM image conditioners on GPU across runs: "
+                + ", ".join(stabilized),
+                flush=True,
+            )
+    except Exception as exc:
+        print(f"[Blackwell] Image conditioner stabilization skipped: {exc}", flush=True)
+
+
+def prepare_low_vram_endpoint(app_module):
+    if not getattr(app_module, "LOW_VRAM", False):
+        return
+    init_models = getattr(app_module, "init_models", None)
+    if callable(init_models):
+        init_models()
+    stabilize_low_vram_image_conditioners(app_module)
+
+
 def is_fatal_cuda_error(exc: BaseException) -> bool:
-    message = str(exc)
-    return (
-        "device not ready" in message
-        or "CUDACachingAllocator.cpp" in message
-        or "INTERNAL ASSERT FAILED" in message
+    message = str(exc).lower()
+    return any(
+        pattern in message
+        for pattern in (
+            "device not ready",
+            "cudacachingallocator.cpp",
+            "internal assert failed",
+            "illegal memory access",
+            "unspecified launch failure",
+            "device-side assert",
+        )
     )
 
 
@@ -270,6 +337,7 @@ def serialize_gpu_apis(app_module):
         def wrapped(*args, __fn=fn, __endpoint_name=endpoint_name, **kwargs):
             with gpu_job_lock:
                 try:
+                    prepare_low_vram_endpoint(app_module)
                     return __fn(*args, **kwargs)
                 except RuntimeError as exc:
                     if is_fatal_cuda_error(exc):
