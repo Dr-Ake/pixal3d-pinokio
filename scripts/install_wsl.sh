@@ -26,6 +26,8 @@ if [ ! -d "$APP_DIR/.git" ]; then
   echo "[Pixal3D] Cloning TencentARC/Pixal3D..."
   rm -rf "$APP_DIR"
   git clone https://github.com/TencentARC/Pixal3D.git "$APP_DIR"
+  echo "[Pixal3D] Applying local patches..."
+  cp -f "$LAUNCHER_ROOT/patches/app.py" "$APP_DIR/app.py"
 fi
 
 PY="$ENV_DIR/bin/python"

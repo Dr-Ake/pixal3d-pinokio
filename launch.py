@@ -341,12 +341,15 @@ def serialize_gpu_apis(app_module):
                     return __fn(*args, **kwargs)
                 except RuntimeError as exc:
                     if is_fatal_cuda_error(exc):
+                        import traceback
+                        traceback.print_exc()
                         print(
                             f"[CUDA] Fatal CUDA context error in {__endpoint_name}; exiting so Pinokio can restart cleanly: {exc}",
                             flush=True,
                         )
                         cleanup_cuda_state(app_module, __endpoint_name)
-                        os._exit(1)
+                        os._exit(0)
+
                     raise
                 finally:
                     cleanup_cuda_state(app_module, __endpoint_name)
