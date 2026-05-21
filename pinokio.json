@@ -1,0 +1,22 @@
+{
+  "title": "Pixal3D",
+  "description": "Pixel-aligned 3D generation from a single image. On Windows this launcher runs Pixal3D inside WSL Ubuntu with NVIDIA CUDA support.",
+  "links": [
+    {
+      "title": "Project",
+      "value": "https://ldyang694.github.io/projects/pixal3d/"
+    },
+    {
+      "title": "GitHub",
+      "value": "https://github.com/TencentARC/Pixal3D"
+    },
+    {
+      "title": "Hosted Demo",
+      "value": "https://huggingface.co/spaces/TencentARC/Pixal3D"
+    },
+    {
+      "title": "Models",
+      "value": "https://huggingface.co/TencentARC/Pixal3D"
+    }
+  ]
+}
