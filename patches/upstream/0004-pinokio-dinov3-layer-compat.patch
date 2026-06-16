@@ -1,0 +1,120 @@
+diff --git a/pixal3d/modules/image_feature_extractor.py b/pixal3d/modules/image_feature_extractor.py
+index 4aff22e..13dcb3a 100644
+--- a/pixal3d/modules/image_feature_extractor.py
++++ b/pixal3d/modules/image_feature_extractor.py
+@@ -7,6 +7,23 @@ import numpy as np
+ from PIL import Image
+ 
+ 
++def _dinov3_layers(model):
++    for path in (
++        ("layer",),
++        ("layers",),
++        ("model", "layer"),
++        ("model", "layers"),
++        ("encoder", "layer"),
++        ("encoder", "layers"),
++    ):
++        current = model
++        for attr in path:
++            current = getattr(current, attr, None)
++        if current is not None:
++            return current
++    raise AttributeError(f"{model.__class__.__name__} does not expose a DINOv3 layer stack")
++
++
+ class DinoV2FeatureExtractor:
+     """
+     Feature extractor for DINOv2 models.
+@@ -82,7 +97,7 @@ class DinoV3FeatureExtractor:
+         hidden_states = self.model.embeddings(image, bool_masked_pos=None)
+         position_embeddings = self.model.rope_embeddings(image)
+ 
+-        for i, layer_module in enumerate(self.model.layer):
++        for i, layer_module in enumerate(_dinov3_layers(self.model)):
+             hidden_states = layer_module(
+                 hidden_states,
+                 position_embeddings=position_embeddings,
+diff --git a/pixal3d/trainers/flow_matching/mixins/image_conditioned.py b/pixal3d/trainers/flow_matching/mixins/image_conditioned.py
+index 3cb365e..6d020d4 100644
+--- a/pixal3d/trainers/flow_matching/mixins/image_conditioned.py
++++ b/pixal3d/trainers/flow_matching/mixins/image_conditioned.py
+@@ -9,6 +9,23 @@ from PIL import Image
+ from ....utils import dist_utils
+ 
+ 
++def _dinov3_layers(model):
++    for path in (
++        ("layer",),
++        ("layers",),
++        ("model", "layer"),
++        ("model", "layers"),
++        ("encoder", "layer"),
++        ("encoder", "layers"),
++    ):
++        current = model
++        for attr in path:
++            current = getattr(current, attr, None)
++        if current is not None:
++            return current
++    raise AttributeError(f"{model.__class__.__name__} does not expose a DINOv3 layer stack")
++
++
+ class DinoV2FeatureExtractor:
+     """
+     Feature extractor for DINOv2 models.
+@@ -84,7 +99,7 @@ class DinoV3FeatureExtractor:
+         hidden_states = self.model.embeddings(image, bool_masked_pos=None)
+         position_embeddings = self.model.rope_embeddings(image)
+ 
+-        for i, layer_module in enumerate(self.model.layer):
++        for i, layer_module in enumerate(_dinov3_layers(self.model)):
+             hidden_states = layer_module(
+                 hidden_states,
+                 position_embeddings=position_embeddings,
+diff --git a/pixal3d/trainers/flow_matching/mixins/image_conditioned_proj.py b/pixal3d/trainers/flow_matching/mixins/image_conditioned_proj.py
+index 6c1b3d0..85a2b48 100644
+--- a/pixal3d/trainers/flow_matching/mixins/image_conditioned_proj.py
++++ b/pixal3d/trainers/flow_matching/mixins/image_conditioned_proj.py
+@@ -21,6 +21,23 @@ from ....utils.dist_utils import read_file_dist
+ # Projection Utilities
+ # =============================================================================
+ 
++def _dinov3_layers(model):
++    for path in (
++        ("layer",),
++        ("layers",),
++        ("model", "layer"),
++        ("model", "layers"),
++        ("encoder", "layer"),
++        ("encoder", "layers"),
++    ):
++        current = model
++        for attr in path:
++            current = getattr(current, attr, None)
++        if current is not None:
++            return current
++    raise AttributeError(f"{model.__class__.__name__} does not expose a DINOv3 layer stack")
++
++
+ def project_points_to_image_batch(
+     points_3d: torch.Tensor, 
+     transform_matrix: torch.Tensor, 
+@@ -453,7 +468,7 @@ class DinoV3ProjFeatureExtractor(nn.Module):
+         hidden_states = self.model.embeddings(image, bool_masked_pos=None)
+         position_embeddings = self.model.rope_embeddings(image)
+ 
+-        for layer_module in self.model.layer:
++        for layer_module in _dinov3_layers(self.model):
+             hidden_states = layer_module(
+                 hidden_states,
+                 position_embeddings=position_embeddings,
+@@ -713,7 +728,7 @@ class DinoV3VaeProjFeatureExtractor(nn.Module):
+         image = image.to(self.dino_model.embeddings.patch_embeddings.weight.dtype)
+         hidden_states = self.dino_model.embeddings(image, bool_masked_pos=None)
+         position_embeddings = self.dino_model.rope_embeddings(image)
+-        for layer_module in self.dino_model.layer:
++        for layer_module in _dinov3_layers(self.dino_model):
+             hidden_states = layer_module(
+                 hidden_states,
+                 position_embeddings=position_embeddings,

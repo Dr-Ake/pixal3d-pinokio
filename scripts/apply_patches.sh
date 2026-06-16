@@ -61,12 +61,16 @@ PATCHES=(
   "$PATCH_DIR/0001-pinokio-app-export-api.patch"
   "$PATCH_DIR/0002-pinokio-index-export-ui.patch"
   "$PATCH_DIR/0003-pinokio-pipeline-memory-cleanup.patch"
+  "$PATCH_DIR/0004-pinokio-dinov3-layer-compat.patch"
 )
 
 PATCHED_PATHS=(
   "app.py"
   "index.html"
   "pixal3d/pipelines/pixal3d_image_to_3d.py"
+  "pixal3d/trainers/flow_matching/mixins/image_conditioned_proj.py"
+  "pixal3d/trainers/flow_matching/mixins/image_conditioned.py"
+  "pixal3d/modules/image_feature_extractor.py"
 )
 
 git_app() {
@@ -123,40 +127,56 @@ check_no_unexpected_dirty_files() {
   fi
 }
 
-can_apply_all() {
-  local patch
+patch_can_apply() {
+  git_app apply --check --whitespace=nowarn "$1" >/dev/null 2>&1
+}
+
+patch_is_applied() {
+  git_app apply --reverse --check --whitespace=nowarn "$1" >/dev/null 2>&1
+}
+
+check_each_patch() {
+  local patch ok=0
   for patch in "${PATCHES[@]}"; do
-    if ! git_app apply --check --whitespace=nowarn "$patch" >/dev/null 2>&1; then
-      return 1
+    if patch_is_applied "$patch"; then
+      echo "[Pixal3D] $(basename "$patch") is already applied."
+    elif patch_can_apply "$patch"; then
+      echo "[Pixal3D] $(basename "$patch") can be applied."
+    else
+      ok=1
     fi
   done
-  return 0
+  return "$ok"
 }
 
-can_reverse_all() {
+apply_missing() {
   local patch
   for patch in "${PATCHES[@]}"; do
-    if ! git_app apply --reverse --check --whitespace=nowarn "$patch" >/dev/null 2>&1; then
-      return 1
+    if patch_is_applied "$patch"; then
+      echo "[Pixal3D] $(basename "$patch") is already applied; skipping."
+    elif patch_can_apply "$patch"; then
+      echo "[Pixal3D] Applying $(basename "$patch")"
+      git_app apply --whitespace=nowarn "$patch"
+    else
+      diagnose_failure "apply patches"
+      fail_conflict
     fi
   done
-  return 0
 }
 
-apply_all() {
-  local patch
-  for patch in "${PATCHES[@]}"; do
-    echo "[Pixal3D] Applying $(basename "$patch")"
-    git_app apply --whitespace=nowarn "$patch"
-  done
-}
-
-reverse_all() {
+reverse_applied() {
   local i patch
   for ((i=${#PATCHES[@]} - 1; i >= 0; i--)); do
     patch="${PATCHES[$i]}"
-    echo "[Pixal3D] Removing $(basename "$patch")"
-    git_app apply --reverse --whitespace=nowarn "$patch"
+    if patch_can_apply "$patch"; then
+      echo "[Pixal3D] $(basename "$patch") is not applied; skipping."
+    elif patch_is_applied "$patch"; then
+      echo "[Pixal3D] Removing $(basename "$patch")"
+      git_app apply --reverse --whitespace=nowarn "$patch"
+    else
+      diagnose_failure "unapply patches"
+      fail_conflict
+    fi
   done
 }
 
@@ -203,9 +223,7 @@ echo "[Pixal3D] Backup saved at: $BACKUP_DIR"
 
 case "$MODE" in
   check)
-    if can_reverse_all; then
-      echo "[Pixal3D] Patches are already applied cleanly."
-    elif can_apply_all; then
+    if check_each_patch; then
       echo "[Pixal3D] Dry-run patch check passed."
     else
       diagnose_failure "apply patches"
@@ -213,23 +231,19 @@ case "$MODE" in
     fi
     ;;
   unapply)
-    if can_apply_all; then
-      echo "[Pixal3D] Patches are not currently applied; nothing to remove."
-    elif can_reverse_all; then
+    if check_each_patch; then
       echo "[Pixal3D] Dry-run reverse patch check passed."
-      reverse_all
-      echo "[Pixal3D] Patches removed before upstream update."
+      reverse_applied
+      echo "[Pixal3D] Applied patches removed before upstream update."
     else
       diagnose_failure "unapply patches"
       fail_conflict
     fi
     ;;
   apply)
-    if can_reverse_all; then
-      echo "[Pixal3D] Patches are already applied; nothing to do."
-    elif can_apply_all; then
+    if check_each_patch; then
       echo "[Pixal3D] Dry-run patch check passed."
-      apply_all
+      apply_missing
       echo "[Pixal3D] Patches applied."
     else
       diagnose_failure "apply patches"

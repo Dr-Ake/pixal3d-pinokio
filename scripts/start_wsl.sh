@@ -78,15 +78,16 @@ export HF_HOME="$WSL_ROOT/cache/HF_HOME"
 export TORCH_HOME="$WSL_ROOT/cache/TORCH_HOME"
 export GRADIO_TEMP_DIR="$WSL_ROOT/cache/GRADIO_TEMP_DIR"
 
-if [ -n "${HF_TOKEN:-}" ] && [ -z "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
+if [ -z "${PIXAL3D_REMBG_MODEL:-}" ]; then
+  unset HF_TOKEN HUGGING_FACE_HUB_TOKEN
+  export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
+elif [ -n "${HF_TOKEN:-}" ] && [ -z "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
   export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
 elif [ -z "${HF_TOKEN:-}" ] && [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
   export HF_TOKEN="$HUGGING_FACE_HUB_TOKEN"
 fi
 
-if [ -z "${HF_TOKEN:-}" ]; then
-  echo "[Pixal3D] HF_TOKEN is not set. briaai/RMBG-2.0 is gated, so first generation may fail until Hugging Face access is accepted and a read token is provided."
-fi
+"$PY" "$LAUNCHER_ROOT/scripts/check_hf_access.py"
 
 LOW_VRAM_ARG=""
 if [ "$MODE" = "low" ]; then

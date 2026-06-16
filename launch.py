@@ -8,6 +8,8 @@ import types
 
 
 gpu_job_lock = threading.Lock()
+DEFAULT_REMBG_MODEL = "ZhengPeng7/BiRefNet"
+GATED_REMBG_MODEL = "briaai/RMBG-2.0"
 
 
 def allow_local_gradio_file_urls(host: str):
@@ -31,6 +33,44 @@ def allow_local_gradio_file_urls(host: str):
 
     if added:
         print(f"[Gradio] Allowing local file URLs for: {', '.join(added)}", flush=True)
+
+
+def prefer_public_rembg_model():
+    """Use a public background-removal model unless the user explicitly opts in."""
+    requested_model = os.environ.get("PIXAL3D_REMBG_MODEL")
+    if not requested_model:
+        os.environ["HF_TOKEN"] = ""
+        os.environ["HUGGING_FACE_HUB_TOKEN"] = ""
+        os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
+
+    try:
+        import pixal3d.pipelines.rembg as rembg
+    except Exception as exc:
+        print(f"[RMBG] Could not patch background-removal model selection: {exc}", flush=True)
+        return
+
+    birefnet_cls = getattr(rembg, "BiRefNet", None)
+    if birefnet_cls is None or getattr(birefnet_cls, "_pinokio_public_default", False):
+        return
+
+    original_init = birefnet_cls.__init__
+
+    @functools.wraps(original_init)
+    def init_with_public_default(self, model_name=DEFAULT_REMBG_MODEL, *args, **kwargs):
+        if requested_model:
+            model_name = requested_model
+        elif model_name == GATED_REMBG_MODEL:
+            model_name = DEFAULT_REMBG_MODEL
+            print(
+                f"[RMBG] Using public {DEFAULT_REMBG_MODEL} instead of gated {GATED_REMBG_MODEL}. "
+                f"Set PIXAL3D_REMBG_MODEL={GATED_REMBG_MODEL} to opt in.",
+                flush=True,
+            )
+
+        return original_init(self, model_name=model_name, *args, **kwargs)
+
+    birefnet_cls.__init__ = init_with_public_default
+    birefnet_cls._pinokio_public_default = True
 
 
 def force_natten_flex_on_blackwell():
@@ -405,6 +445,7 @@ def main():
     allow_local_gradio_file_urls(args.host)
     import app as pixal3d_app
 
+    prefer_public_rembg_model()
     pixal3d_app.LOW_VRAM = args.low_vram
     serialize_gpu_apis(pixal3d_app)
     if args.preload:

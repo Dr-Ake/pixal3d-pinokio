@@ -1,4 +1,7 @@
 module.exports = {
+  requires: {
+    bundle: "ai"
+  },
   run: [
     {
       when: "{{platform === 'win32'}}",
@@ -7,7 +10,7 @@ module.exports = {
         message: [
           "powershell -Command \"[Console]::OutputEncoding = [System.Text.Encoding]::Unicode; if ((wsl.exe -l -v 2>&1 | Out-String) -notmatch 'Ubuntu') { Write-Host 'Ubuntu WSL distribution not found. Installing Ubuntu...'; wsl.exe --install -d Ubuntu --no-launch } else { Write-Host 'Ubuntu WSL distribution is already installed.' }\"",
           "wsl.exe -d Ubuntu -u root apt-get update",
-          "wsl.exe -d Ubuntu -u root apt-get install -y bzip2 git curl",
+          "wsl.exe -d Ubuntu -u root apt-get install -y bzip2 git curl build-essential",
           "wsl.exe -d Ubuntu --cd \"{{cwd}}\" -- bash scripts/install_wsl.sh"
         ]
       },

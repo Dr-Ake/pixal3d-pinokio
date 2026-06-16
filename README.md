@@ -12,7 +12,11 @@ The upstream TRELLIS.2 base and Pixal3D demo depend on Linux CUDA wheels for `o_
 
 The WSL installer creates a private environment under `~/.pinokio-pixal3d` inside Ubuntu.
 
-Pixal3D also downloads `briaai/RMBG-2.0` for background removal. That model is gated on Hugging Face, so accept access at <https://huggingface.co/briaai/RMBG-2.0> and provide a read token from <https://huggingface.co/settings/tokens> when Pinokio asks for `HF_TOKEN`.
+Pixal3D's upstream pipeline points background removal at `briaai/RMBG-2.0`, which is gated on Hugging Face. This launcher uses the public `ZhengPeng7/BiRefNet` background-removal model by default so local generation does not require a Hugging Face token. To opt back into the gated model, set `PIXAL3D_REMBG_MODEL=briaai/RMBG-2.0`, accept access at <https://huggingface.co/briaai/RMBG-2.0>, and provide a read token from <https://huggingface.co/settings/tokens> as `HF_TOKEN`.
+
+Token safety: the launcher does not store or ship a Hugging Face token, and the default launch path clears `HF_TOKEN`/`HUGGING_FACE_HUB_TOKEN` so a locally saved token is not used accidentally. If someone else downloads this launcher, they will not receive your token. Only users who explicitly set `PIXAL3D_REMBG_MODEL` to a custom or gated background-removal model need to provide their own token. Local generated files such as `ENVIRONMENT`, `logs`, and `cache` are ignored by git and should not be included in manual zip uploads.
+
+At startup the launcher checks that the selected background-removal model is reachable. If you opt into a gated model and Hugging Face returns `401` or `403`, replace the token from Pinokio's Configure tab after accepting access to the model page. This catches token/access problems before the Web UI opens, instead of failing after you upload an image and click generate.
 
 RTX 50-series GPUs may print a PyTorch CUDA capability warning because the upstream Pixal3D wheel set currently pins Torch 2.6/CUDA 12.4. The launcher still opens the web UI, but generation depends on upstream wheel support for your GPU.
 
@@ -23,7 +27,7 @@ On RTX 50-series / Blackwell GPUs in WSL, this launcher uses Low VRAM mode even 
 ## Usage
 
 1. Click Install in WSL on Windows, or Install on Linux.
-2. If prompted, enter `HF_TOKEN` after accepting access to `briaai/RMBG-2.0`.
+2. No Hugging Face token is required for the default background-removal model.
 3. Click Start WSL Standard when you have enough VRAM, or Start WSL Low VRAM when you need the safer memory path.
 4. Open the Web UI when Pinokio shows it.
 5. Upload an image, generate previews, then extract the GLB.
