@@ -5,7 +5,17 @@ import urllib.request
 
 
 DEFAULT_MODEL_ID = "ZhengPeng7/BiRefNet"
-MODEL_ID = os.environ.get("PIXAL3D_REMBG_MODEL") or DEFAULT_MODEL_ID
+
+
+def env_value(name: str) -> str:
+    value = os.environ.get(name) or ""
+    if value.startswith("{{") and value.endswith("}}"):
+        os.environ.pop(name, None)
+        return ""
+    return value
+
+
+MODEL_ID = env_value("PIXAL3D_REMBG_MODEL") or DEFAULT_MODEL_ID
 CHECK_URL = f"https://huggingface.co/{MODEL_ID}/resolve/main/config.json"
 ACCESS_URL = f"https://huggingface.co/{MODEL_ID}"
 TOKEN_URL = "https://huggingface.co/settings/tokens"
@@ -31,7 +41,7 @@ def main() -> None:
 
     token = None
     if MODEL_ID != DEFAULT_MODEL_ID:
-        token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        token = env_value("HF_TOKEN") or env_value("HUGGING_FACE_HUB_TOKEN")
 
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     request = urllib.request.Request(CHECK_URL, method="HEAD", headers=headers)

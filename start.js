@@ -3,9 +3,9 @@ module.exports = async (kernel) => {
   const lowVramEnabled = "{{args && (args.low_vram === true || args.low_vram === 'true' || args.low_vram === 1 || args.low_vram === '1') ? '1' : '0'}}"
   const lowVramArg = "{{args && (args.low_vram === true || args.low_vram === 'true' || args.low_vram === 1 || args.low_vram === '1') ? '--low_vram' : ''}}"
   const wslMode = "{{args && (args.low_vram === true || args.low_vram === 'true' || args.low_vram === 1 || args.low_vram === '1') ? 'low' : 'standard'}}"
-  const rembgModel = "{{envs.PIXAL3D_REMBG_MODEL}}"
-  const hfToken = rembgModel ? "{{envs.HF_TOKEN}}" : ""
-  const hubToken = rembgModel ? "{{envs.HUGGING_FACE_HUB_TOKEN || envs.HF_TOKEN}}" : ""
+  const rembgModel = "{{envs.PIXAL3D_REMBG_MODEL ? envs.PIXAL3D_REMBG_MODEL : ''}}"
+  const hfToken = rembgModel ? "{{envs.HF_TOKEN ? envs.HF_TOKEN : ''}}" : ""
+  const hubToken = rembgModel ? "{{envs.HUGGING_FACE_HUB_TOKEN ? envs.HUGGING_FACE_HUB_TOKEN : (envs.HF_TOKEN ? envs.HF_TOKEN : '')}}" : ""
   const hfEnv = rembgModel ? {
     PIXAL3D_REMBG_MODEL: rembgModel,
     HF_TOKEN: hfToken,
@@ -15,7 +15,7 @@ module.exports = async (kernel) => {
     HUGGING_FACE_HUB_TOKEN: ""
   }
   const wslPassThrough = rembgModel ? ":PIXAL3D_REMBG_MODEL/u:HF_TOKEN/u:HUGGING_FACE_HUB_TOKEN/u" : ":HF_TOKEN/u:HUGGING_FACE_HUB_TOKEN/u"
-  const existingWslEnv = "{{envs.WSLENV}}"
+  const existingWslEnv = "{{envs.WSLENV ? envs.WSLENV : ''}}"
   const wslEnv = {
     ...hfEnv,
     WSLENV: existingWslEnv ? `${existingWslEnv}${wslPassThrough}` : wslPassThrough.slice(1)
@@ -37,6 +37,7 @@ module.exports = async (kernel) => {
           }
         },
         {
+          when: "{{input.event && input.event[1]}}",
           method: "local.set",
           params: {
             url: "{{input.event[1]}}"
@@ -78,6 +79,7 @@ module.exports = async (kernel) => {
         }
       },
       {
+        when: "{{input.event && input.event[1]}}",
         method: "local.set",
         params: {
           url: "{{input.event[1]}}"

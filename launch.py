@@ -12,6 +12,14 @@ DEFAULT_REMBG_MODEL = "ZhengPeng7/BiRefNet"
 GATED_REMBG_MODEL = "briaai/RMBG-2.0"
 
 
+def env_value(name: str) -> str:
+    value = os.environ.get(name) or ""
+    if value.startswith("{{") and value.endswith("}}"):
+        os.environ.pop(name, None)
+        return ""
+    return value
+
+
 def allow_local_gradio_file_urls(host: str):
     """Let Gradio re-fetch files from this local server during API preprocessing."""
     try:
@@ -37,7 +45,7 @@ def allow_local_gradio_file_urls(host: str):
 
 def prefer_public_rembg_model():
     """Use a public background-removal model unless the user explicitly opts in."""
-    requested_model = os.environ.get("PIXAL3D_REMBG_MODEL")
+    requested_model = env_value("PIXAL3D_REMBG_MODEL")
     if not requested_model:
         os.environ["HF_TOKEN"] = ""
         os.environ["HUGGING_FACE_HUB_TOKEN"] = ""

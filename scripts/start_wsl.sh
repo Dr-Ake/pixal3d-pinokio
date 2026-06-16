@@ -78,6 +78,20 @@ export HF_HOME="$WSL_ROOT/cache/HF_HOME"
 export TORCH_HOME="$WSL_ROOT/cache/TORCH_HOME"
 export GRADIO_TEMP_DIR="$WSL_ROOT/cache/GRADIO_TEMP_DIR"
 
+is_unresolved_template() {
+  case "$1" in
+    "{{"*"}}") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+for name in PIXAL3D_REMBG_MODEL HF_TOKEN HUGGING_FACE_HUB_TOKEN; do
+  value="${!name:-}"
+  if is_unresolved_template "$value"; then
+    unset "$name"
+  fi
+done
+
 if [ -z "${PIXAL3D_REMBG_MODEL:-}" ]; then
   unset HF_TOKEN HUGGING_FACE_HUB_TOKEN
   export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
