@@ -44,6 +44,17 @@ Update removes the current launcher patch overlay, pulls upstream with `--ff-onl
 
 Each patch run writes a diagnostic snapshot under `cache/patch-backups`, including the upstream commit, status, and worktree diff. The `cache` folder is intentionally ignored by git.
 
+## Troubleshooting
+
+### CUDA driver error: device not ready
+
+If the application crashes during the 3D generation phase (especially the high-resolution 1024x1024 step) with a `CUDA driver error: device not ready` message, this is typically caused by the **Windows TDR (Timeout Detection and Recovery)** mechanism.
+
+Windows resets the GPU driver if a computation takes longer than 2 seconds by default. To fix this:
+1. Go back to the Pinokio menu for Pixal3D.
+2. Click **Fix GPU Timeout (TDR)** to automatically set the timeout to 60 seconds.
+3. **Restart your computer** (the registry changes only apply after a restart).
+
 ## API
 
 Pixal3D exposes a Gradio API from the launched base URL.

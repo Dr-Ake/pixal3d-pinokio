@@ -135,8 +135,6 @@ def force_natten_flex_on_blackwell():
         if is_causal not in (False, None, (False, False)):
             raise ValueError("Blackwell mixed-head NAF fallback does not support causal attention.")
 
-        import torch.nn.functional as F
-
         kernel_h, kernel_w = pair(kernel_size)
         dilation_h, dilation_w = pair(dilation)
         radius_h = kernel_h // 2
@@ -145,15 +143,19 @@ def force_natten_flex_on_blackwell():
         pad_w = radius_w * dilation_w
         scale = scale if scale is not None else query.shape[-1] ** -0.5
 
+        # Synchronize to catch any upstream CUDA errors (e.g., TDR from sparse conv)
+        # before they manifest as confusing "device not ready" on our allocations
+        try:
+            torch.cuda.synchronize()
+        except RuntimeError as e:
+            print(f"[NATTEN FALLBACK] CUDA context already dead before fallback entry: {e}", flush=True)
+            print(f"[NATTEN FALLBACK] This is caused by an upstream kernel (likely sparse conv during HR SLat sampling).", flush=True)
+            print(f"[NATTEN FALLBACK] If this persists after increasing TDR timeout, check GPU thermals/power.", flush=True)
+            raise
+
         batch, height, width, heads, value_dim = value.shape
         tile_rows = max(1, int(os.environ.get("PIXAL3D_NATTEN_FALLBACK_TILE_ROWS", "64")))
         query_f = query.float()
-        key_pad = F.pad(key.permute(0, 3, 4, 1, 2), (pad_w, pad_w, pad_h, pad_h))
-        value_pad = F.pad(value.permute(0, 3, 4, 1, 2), (pad_w, pad_w, pad_h, pad_h))
-        valid_pad = F.pad(
-            torch.ones(1, 1, 1, height, width, device=query.device, dtype=torch.bool),
-            (pad_w, pad_w, pad_h, pad_h),
-        )
 
         output = torch.empty((batch, height, width, heads, value_dim), device=query.device, dtype=value.dtype)
 
@@ -161,30 +163,75 @@ def force_natten_flex_on_blackwell():
             row_end = min(row_start + tile_rows, height)
             tile_height = row_end - row_start
             query_tile = query_f[:, row_start:row_end]
+
+            # Slice the key and value for the current row tile with neighborhood padding
+            r_start_valid = max(0, row_start - pad_h)
+            r_end_valid = min(height, row_end + pad_h)
+            slice_height = r_end_valid - r_start_valid
+
+            pad_top = max(0, pad_h - row_start)
+            pad_bottom = max(0, (row_end + pad_h) - height)
+
+            # Pre-allocate tile padded tensors (much smaller than full tensor padding)
+            tile_key_pad = torch.zeros(
+                (batch, slice_height + pad_top + pad_bottom, width + 2 * pad_w, heads, key.shape[-1]),
+                device=key.device,
+                dtype=key.dtype
+            )
+            tile_key_pad[:, pad_top : pad_top + slice_height, pad_w : pad_w + width, :, :] = key[:, r_start_valid:r_end_valid]
+
+            tile_value_pad = torch.zeros(
+                (batch, slice_height + pad_top + pad_bottom, width + 2 * pad_w, heads, value_dim),
+                device=value.device,
+                dtype=value.dtype
+            )
+            tile_value_pad[:, pad_top : pad_top + slice_height, pad_w : pad_w + width, :, :] = value[:, r_start_valid:r_end_valid]
+
+            # Pre-allocate invalid mask pad (all True/invalid by default)
+            tile_invalid_pad = torch.ones(
+                (1, slice_height + pad_top + pad_bottom, width + 2 * pad_w, 1),
+                device=query.device,
+                dtype=torch.bool
+            )
+            # Set the valid center region to False
+            tile_invalid_pad[:, pad_top : pad_top + slice_height, pad_w : pad_w + width, :] = False
+
             max_score = torch.full((batch, tile_height, width, heads), -torch.inf, device=query.device, dtype=torch.float32)
             normalizer = torch.zeros((batch, tile_height, width, heads), device=query.device, dtype=torch.float32)
             output_tile = torch.zeros((batch, tile_height, width, heads, value_dim), device=query.device, dtype=value.dtype)
 
             for offset_h in range(kernel_h):
-                src_h = offset_h * dilation_h + row_start
+                tile_src_h = offset_h * dilation_h
                 for offset_w in range(kernel_w):
                     src_w = offset_w * dilation_w
-                    key_shift = key_pad[..., src_h:src_h + tile_height, src_w:src_w + width].permute(0, 3, 4, 1, 2)
-                    value_shift = value_pad[..., src_h:src_h + tile_height, src_w:src_w + width].permute(0, 3, 4, 1, 2)
-                    valid = valid_pad[..., src_h:src_h + tile_height, src_w:src_w + width].permute(0, 3, 4, 1, 2).squeeze(-1)
-                    score = (query_tile * key_shift.float()).sum(dim=-1) * scale
-                    score = score.masked_fill(~valid, -torch.inf)
+                    key_shift = tile_key_pad[:, tile_src_h : tile_src_h + tile_height, src_w : src_w + width, :, :]
+                    value_shift = tile_value_pad[:, tile_src_h : tile_src_h + tile_height, src_w : src_w + width, :, :]
+                    invalid = tile_invalid_pad[:, tile_src_h : tile_src_h + tile_height, src_w : src_w + width, :]
+                    
+                    # Compute dot-product directly along the last dimension using einsum, avoiding allocating huge intermediate tensors
+                    score = torch.einsum("...c,...c->...", query_tile, key_shift.to(query_tile.dtype)) * scale
+                    score.masked_fill_(invalid, -torch.inf)
+                    
                     next_max = torch.maximum(max_score, score)
-                    old_weight = torch.exp(max_score - next_max).nan_to_num(0.0)
-                    new_weight = torch.exp(score - next_max).nan_to_num(0.0)
-                    output_tile = (
-                        output_tile * old_weight.to(output_tile.dtype).unsqueeze(-1)
-                        + value_shift * new_weight.to(output_tile.dtype).unsqueeze(-1)
-                    )
-                    normalizer = normalizer * old_weight + new_weight
+                    old_weight = torch.exp(max_score - next_max).nan_to_num_(0.0)
+                    new_weight = torch.exp(score - next_max).nan_to_num_(0.0)
+                    
+                    # Perform multiplications and additions in-place to avoid allocating 134MB intermediate loop tensors
+                    output_tile.mul_(old_weight.to(output_tile.dtype).unsqueeze(-1))
+                    output_tile.addcmul_(value_shift, new_weight.to(output_tile.dtype).unsqueeze(-1))
+                    
+                    normalizer.mul_(old_weight).add_(new_weight)
                     max_score = next_max
 
             output[:, row_start:row_end] = output_tile / normalizer.clamp_min(1e-20).to(output_tile.dtype).unsqueeze(-1)
+            
+            # Defensive sync to catch dead context early and prevent driver overload
+            try:
+                if (row_start // tile_rows) % 4 == 0:
+                    torch.cuda.synchronize()
+            except RuntimeError as e:
+                print(f"[NATTEN FALLBACK] CUDA context died during tile processing (row {row_start}): {e}", flush=True)
+                raise
         return output
 
     def get_call_arg(args, kwargs, name, index, default=None):
@@ -213,6 +260,7 @@ def force_natten_flex_on_blackwell():
                 ):
                     print(f"[NATTEN WRAPPER] Entering mixed head dim fallback!", flush=True)
                     try:
+                        print(f"[NATTEN WRAPPER] VRAM before fallback: {torch.cuda.memory_allocated()/1024**3:.2f} GB alloc, {torch.cuda.max_memory_allocated()/1024**3:.2f} GB max", flush=True)
                         res = torch_na2d_mixed_head_dim(
                             query,
                             key,
@@ -438,7 +486,7 @@ def main():
     os.environ.setdefault("SPARSE_ATTN_BACKEND", os.environ["ATTN_BACKEND"])
     os.environ.setdefault("SPARSE_CONV_BACKEND", "flex_gemm")
     if args.low_vram:
-        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,garbage_collection_threshold:0.8,max_split_size_mb:512"
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
     else:
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8"
     os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")

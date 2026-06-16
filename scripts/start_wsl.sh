@@ -68,7 +68,7 @@ fi
 export SPARSE_ATTN_BACKEND="${SPARSE_ATTN_BACKEND:-$ATTN_BACKEND}"
 export SPARSE_CONV_BACKEND="${SPARSE_CONV_BACKEND:-flex_gemm}"
 if [ "$MODE" = "low" ]; then
-  export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,garbage_collection_threshold:0.8,max_split_size_mb:512}"
+  export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-garbage_collection_threshold:0.8}"
 else
   export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-garbage_collection_threshold:0.8}"
 fi
@@ -109,6 +109,17 @@ if [ "$MODE" = "low" ]; then
   LOW_VRAM_ARG="--low_vram"
 else
   export LOW_VRAM=0
+fi
+
+if command -v reg.exe >/dev/null 2>&1; then
+  TDR_DELAY=$(reg.exe query "HKLM\System\CurrentControlSet\Control\GraphicsDrivers" /v TdrDelay 2>/dev/null | grep -i TdrDelay | awk '{print $3}' || echo "missing")
+  if [ "$TDR_DELAY" = "missing" ]; then
+    echo "=========================================================================="
+    echo "[WARNING] Windows TDR (GPU Timeout) might be set to the default (2s)."
+    echo "[WARNING] If Pixal3D crashes with 'CUDA driver error: device not ready',"
+    echo "[WARNING] please run 'Fix GPU Timeout (TDR)' from the Pinokio menu."
+    echo "=========================================================================="
+  fi
 fi
 
 cd "$APP_DIR"

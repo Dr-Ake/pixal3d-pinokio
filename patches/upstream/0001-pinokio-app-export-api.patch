@@ -8,7 +8,7 @@ index 48479df..c4946f3 100644
  os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
 -os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 +if os.environ.get("LOW_VRAM", "0") == "1":
-+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,garbage_collection_threshold:0.8,max_split_size_mb:512")
++    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8")
 +else:
 +    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8")
  os.environ.setdefault("ATTN_BACKEND", "flash_attn")

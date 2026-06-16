@@ -82,6 +82,14 @@ module.exports = {
         }
       })
 
+      if (kernel.platform === "win32") {
+        items.push({
+          icon: "fa-solid fa-wrench",
+          text: "Fix GPU Timeout (TDR)",
+          href: "fix_tdr.js"
+        })
+      }
+
       return items.concat([{
         icon: "fa-solid fa-globe",
         text: "Hosted Demo",
@@ -110,6 +118,10 @@ module.exports = {
       icon: "fa-solid fa-globe",
       text: "Hosted Demo",
       href: "https://huggingface.co/spaces/TencentARC/Pixal3D"
-    }]
+    }].concat(kernel.platform === "win32" ? [{
+      icon: "fa-solid fa-wrench",
+      text: "Fix GPU Timeout (TDR)",
+      href: "fix_tdr.js"
+    }] : [])
   }
 }
