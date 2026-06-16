@@ -79,7 +79,7 @@ PY
 echo "[Pixal3D] Installing Python dependencies. This can take a while..."
 "$PY" -m pip install --upgrade pip setuptools wheel
 "$PY" -m pip install -r requirements-hfdemo.txt
-"$PY" -m pip install --upgrade gradio gradio_client spaces nest_asyncio pandas lpips tensorboard
+"$PY" -m pip install --upgrade gradio gradio_client spaces nest_asyncio pandas lpips tensorboard "transformers>=4.58.0"
 "$PY" -m pip install --force-reinstall --no-deps https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl
 
 if is_blackwell_gpu; then
